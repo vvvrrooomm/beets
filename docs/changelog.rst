@@ -23,7 +23,8 @@ New features:
 * The `absubmit` plugin now works in parallel (on Python 3 only).
   Thanks to :user:`bemeurer`.
   :bug:`2442`
-
+* The `convert` plugin now works in parallel (on Python 3 only).
+  
 Fixes:
 
 * Restore iTunes Store album art source, and remove the dependency on
