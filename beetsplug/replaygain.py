@@ -21,6 +21,9 @@ import collections
 import sys
 import warnings
 import xml.parsers.expat
+from math import ceil
+from multiprocessing.pool import ThreadPool
+from itertools import repeat
 from six.moves import zip
 
 from beets import ui
@@ -188,6 +191,16 @@ class Bs1770gainBackend(Backend):
         else:
             return self.compute_chunk_gain(items, is_album)
 
+    #     return result
+
+    def invoke_command(self,args):
+        # Invoke the command.
+        self._log.debug(
+            u'executing {0}', u' '.join(map(displayable_path, args))
+        )
+        output = call(args)
+        return output
+    
     def compute_chunk_gain(self, items, is_album):
         """Compute ReplayGain values and return a list of results
         dictionaries as given by `parse_tool_output`.
@@ -196,23 +209,24 @@ class Bs1770gainBackend(Backend):
         cmd = [self.command]
         cmd += [self.method]
         cmd += ['--xml', '-p']
-
+        
         # Workaround for Windows: the underlying tool fails on paths
         # with the \\?\ prefix, so we don't use it here. This
         # prevents the backend from working with long paths.
         args = cmd + [syspath(i.path, prefix=False) for i in items]
         path_list = [i.path for i in items]
 
-        # Invoke the command.
-        self._log.debug(
-            u'executing {0}', u' '.join(map(displayable_path, args))
-        )
-        output = call(args)
+#        pool = ThreadPool()
+        slize_size = ceil(len(items)/os.cpu_count())
+#        output= pool.starmap(self., zip(self.isplitter(items, slize_size), repeat(is_album)))
+        output = self.invoke_command(args)
+#        pool.close()
+#        pool.join()
 
         self._log.debug(u'analysis finished: {0}', output)
         results = self.parse_tool_output(output, path_list, is_album)
         self._log.debug(u'{0} items, {1} results', len(items), len(results))
-        return results
+
 
     def parse_tool_output(self, text, path_list, is_album):
         """Given the  output from bs1770gain, parse the text and
@@ -257,7 +271,12 @@ class Bs1770gainBackend(Backend):
             raise ReplayGainError(
                 u'the number of results returned by bs1770gain does not match '
                 'the number of files passed to it')
+        out = self.sort_by_file(per_file_gain,path_list)
+        if is_album:
+            out.append(album_gain["album"])
+        return out
 
+    def sort_by_file(self, per_file_gain, path_list):
         # bs1770gain does not return the analysis results in the order that
         # files are passed on the command line, because it is sorting the files
         # internally. We must recover the order from the filenames themselves.
@@ -267,11 +286,8 @@ class Bs1770gainBackend(Backend):
             raise ReplayGainError(
                 u'unrecognized filename in bs1770gain output '
                 '(bs1770gain can only deal with utf-8 file names)')
-        if is_album:
-            out.append(album_gain["album"])
         return out
-
-
+    
 # mpgain/aacgain CLI tool backend.
 class CommandBackend(Backend):
 
