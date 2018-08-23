@@ -176,21 +176,34 @@ class Bs1770gainBackend(Backend):
         # In the case of very large sets of music, we break the tracks
         # into smaller chunks and process them one at a time. This
         # avoids running out of memory.
-        i = 0
         job_size = ceil(len(items) / os.cpu_count())
         chunk_size = min(job_size, self.chunk_at)
-        for chunk in self.isplitter(items, chunk_size):
-            i += 1
-            returnchunk = self.compute_chunk_gain(chunk)
-            albumgaintot += returnchunk.album_gain.gain
-            albumpeaktot = max(albumpeaktot, returnchunk.album_gain.peak)
-            returnchunks.track_gains.update(returnchunk.track_gains)
-        returnchunks = returnchunks._replace(album_gain=Gain(albumgaintot / i, albumpeaktot))
-        returnchunks = returnchunks._replace(track_gains=self.sort_by_file(returnchunks.track_gains, [i.path for i in items]))
+        chunk_count = ceil(len(items) / chunk_size)
+
+        result = self.threaded_compute_gain(items, chunk_size, chunk_count)
+
+        for chunk in result:
+            albumgaintot += chunk.album_gain.gain
+            albumpeaktot = max(albumpeaktot, chunk.album_gain.peak)
+            returnchunks.track_gains.update(chunk.track_gains)
+        returnchunks = returnchunks._replace(
+            album_gain=Gain(albumgaintot / chunk_count, albumpeaktot))
+        returnchunks = returnchunks._replace(
+            track_gains=self.sort_by_file(returnchunks.track_gains,
+                                          [i.path for i in items]))
         return returnchunks
 
-
-    #     return result
+    def threaded_compute_gain(self, items, chunk_size, chunk_count):
+        pool = ThreadPool()
+        result = pool.map(self.compute_chunk_gain,
+                          self.isplitter(items, chunk_size))
+        pool.close()
+        pool.join()
+        if len(result) != chunk_count:
+            raise ReplayGainError(
+                u'the number of results chunks does not match '
+                'the number of expected chunks')
+        return result
 
     def invoke_command(self, args):
         # Invoke the command.
@@ -1049,8 +1062,12 @@ class ReplayGainPlugin(BeetsPlugin):
                     self.handle_album(album, write, force)
 
             else:
-                for item in lib.items(ui.decargs(args)):
-                    self.handle_track(item, write, force)
+                pool = ThreadPool()
+                pool.starmap(self.handle_track,
+                             zip(lib.items(ui.decargs(args)),
+                                 repeat([write, force])))
+                pool.close()
+                pool.join()
 
         cmd = ui.Subcommand('replaygain', help=u'analyze for ReplayGain')
         cmd.parser.add_album_option()
