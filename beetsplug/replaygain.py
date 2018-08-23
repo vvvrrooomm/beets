@@ -124,9 +124,8 @@ class Bs1770gainBackend(Backend):
         """Computes the track gain of the given tracks, returns a list
         of TrackGain objects.
         """
-
         output = self.compute_gain(items, False)
-        return output
+        return output.track_gains
 
     def compute_album_gain(self, album):
         """Computes the album gain of the given album, returns an
@@ -134,13 +133,12 @@ class Bs1770gainBackend(Backend):
         """
         # TODO: What should be done when not all tracks in the album are
         # supported?
-
         supported_items = album.items()
         output = self.compute_gain(supported_items, True)
 
         if not output:
             raise ReplayGainError(u'no output from bs1770gain')
-        return AlbumGain(output[-1], output[:-1])
+        return output
 
     def isplitter(self, items, chunk_at):
         """Break an iterable into chunks of at most size `chunk_at`,
@@ -162,10 +160,10 @@ class Bs1770gainBackend(Backend):
                 break
 
     def compute_gain(self, items, is_album):
-        """Computes the track or album gain of a list of items, returns
-        a list of TrackGain objects.
-        When computing album gain, the last TrackGain object returned is
-        the album gain
+        """Computes the track or album gain of a list of Items, returns
+        an AlbumGain object, contains:
+        * a list of TrackGain objects
+        * always an album gain object
         """
 
         if len(items) == 0:
@@ -173,34 +171,35 @@ class Bs1770gainBackend(Backend):
 
         albumgaintot = 0.0
         albumpeaktot = 0.0
-        returnchunks = []
+        returnchunks = AlbumGain(track_gains={}, album_gain=Gain(0, 0))
 
         # In the case of very large sets of music, we break the tracks
         # into smaller chunks and process them one at a time. This
         # avoids running out of memory.
-        if len(items) > self.chunk_at:
-            i = 0
-            for chunk in self.isplitter(items, self.chunk_at):
-                i += 1
-                returnchunk = self.compute_chunk_gain(chunk, is_album)
-                albumgaintot += returnchunk[-1].gain
-                albumpeaktot = max(albumpeaktot, returnchunk[-1].peak)
-                returnchunks = returnchunks + returnchunk[0:-1]
-            returnchunks.append(Gain(albumgaintot / i, albumpeaktot / i))
-            return returnchunks
-        else:
-            return self.compute_chunk_gain(items, is_album)
+        i = 0
+        job_size = ceil(len(items) / os.cpu_count())
+        chunk_size = min(job_size, self.chunk_at)
+        for chunk in self.isplitter(items, chunk_size):
+            i += 1
+            returnchunk = self.compute_chunk_gain(chunk, is_album)
+            albumgaintot += returnchunk.album_gain.gain
+            albumpeaktot = max(albumpeaktot, returnchunk.album_gain.peak)
+            returnchunks.track_gains.update(returnchunk.track_gains)
+        returnchunks = returnchunks._replace(album_gain=Gain(albumgaintot / i, albumpeaktot))
+        returnchunks = returnchunks._replace(track_gains=self.sort_by_file(returnchunks.track_gains, [i.path for i in items]))
+        return returnchunks
+
 
     #     return result
 
-    def invoke_command(self,args):
+    def invoke_command(self, args):
         # Invoke the command.
         self._log.debug(
             u'executing {0}', u' '.join(map(displayable_path, args))
         )
         output = call(args)
         return output
-    
+
     def compute_chunk_gain(self, items, is_album):
         """Compute ReplayGain values and return a list of results
         dictionaries as given by `parse_tool_output`.
@@ -209,32 +208,33 @@ class Bs1770gainBackend(Backend):
         cmd = [self.command]
         cmd += [self.method]
         cmd += ['--xml', '-p']
-        
+
         # Workaround for Windows: the underlying tool fails on paths
         # with the \\?\ prefix, so we don't use it here. This
         # prevents the backend from working with long paths.
         args = cmd + [syspath(i.path, prefix=False) for i in items]
         path_list = [i.path for i in items]
 
-#        pool = ThreadPool()
-        slize_size = ceil(len(items)/os.cpu_count())
-#        output= pool.starmap(self., zip(self.isplitter(items, slize_size), repeat(is_album)))
         output = self.invoke_command(args)
-#        pool.close()
-#        pool.join()
 
         self._log.debug(u'analysis finished: {0}', output)
-        results = self.parse_tool_output(output, path_list, is_album)
+        results = self.parse_tool_output(output)
         self._log.debug(u'{0} items, {1} results', len(items), len(results))
 
+        if len(results.track_gains) != len(path_list):
+            raise ReplayGainError(
+                u'the number of results returned by bs1770gain does not match '
+                'the number of files passed to it')
 
-    def parse_tool_output(self, text, path_list, is_album):
+        return results
+
+    def parse_tool_output(self, text):
         """Given the  output from bs1770gain, parse the text and
         return a list of dictionaries
         containing information about each analyzed file.
         """
         per_file_gain = {}
-        album_gain = {}  # mutable variable so it can be set from handlers
+        album_gain = []  # mutable variable so it can be set from handlers
         parser = xml.parsers.expat.ParserCreate(encoding='utf-8')
         state = {'file': None, 'gain': None, 'peak': None}
 
@@ -261,20 +261,15 @@ class Bs1770gainBackend(Backend):
                 if state['gain'] is None or state['peak'] is None:
                     raise ReplayGainError(u'could not parse gain or peak from '
                                           'the output of bs1770gain')
-                album_gain["album"] = Gain(state['gain'], state['peak'])
+                if sys.version_info >= (3, 0): nonlocal album_gain
+                album_gain = Gain(state['gain'], state['peak'])
                 state['gain'] = state['peak'] = None
+
         parser.StartElementHandler = start_element_handler
         parser.EndElementHandler = end_element_handler
         parser.Parse(text, True)
 
-        if len(per_file_gain) != len(path_list):
-            raise ReplayGainError(
-                u'the number of results returned by bs1770gain does not match '
-                'the number of files passed to it')
-        out = self.sort_by_file(per_file_gain,path_list)
-        if is_album:
-            out.append(album_gain["album"])
-        return out
+        return AlbumGain(track_gains=per_file_gain, album_gain=album_gain)
 
     def sort_by_file(self, per_file_gain, path_list):
         # bs1770gain does not return the analysis results in the order that
@@ -287,7 +282,7 @@ class Bs1770gainBackend(Backend):
                 u'unrecognized filename in bs1770gain output '
                 '(bs1770gain can only deal with utf-8 file names)')
         return out
-    
+
 # mpgain/aacgain CLI tool backend.
 class CommandBackend(Backend):
 
@@ -823,11 +818,7 @@ class AudioToolsBackend(Backend):
         self._log.debug(u'ReplayGain for album {0}: {1:.2f}, {2:.2f}',
                         album, rg_album_gain, rg_album_peak)
 
-        return AlbumGain(
-            Gain(gain=rg_album_gain, peak=rg_album_peak),
-            track_gains=track_gains
-        )
-
+            
 
 # Main plugin logic.
 
@@ -943,6 +934,7 @@ class ReplayGainPlugin(BeetsPlugin):
         item. If replay gain information is already present in all
         items, nothing is done.
         """
+
         if not force and not self.album_requires_gain(album):
             self._log.info(u'Skipping album {0}', album)
             return
