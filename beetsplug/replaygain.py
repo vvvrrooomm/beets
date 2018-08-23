@@ -284,6 +284,7 @@ class Bs1770gainBackend(Backend):
                 '(bs1770gain can only deal with utf-8 file names)')
         return out
 
+
 # mpgain/aacgain CLI tool backend.
 class CommandBackend(Backend):
 
@@ -433,7 +434,7 @@ class GStreamerBackend(Backend):
         self._rg = self.Gst.ElementFactory.make("rganalysis", "rg")
 
         if self._src is None or self._decbin is None or self._conv is None \
-           or self._res is None or self._rg is None:
+                or self._res is None or self._rg is None:
             raise FatalGstreamerPluginReplayGainError(
                 u"Failed to load required GStreamer plugins"
             )
@@ -673,14 +674,14 @@ class GStreamerBackend(Backend):
 
     def _on_pad_added(self, decbin, pad):
         sink_pad = self._conv.get_compatible_pad(pad, None)
-        assert(sink_pad is not None)
+        assert (sink_pad is not None)
         pad.link(sink_pad)
 
     def _on_pad_removed(self, decbin, pad):
         # Called when the decodebin element is disconnected from the
         # rest of the pipeline while switching input files
         peer = pad.get_peer()
-        assert(peer is None)
+        assert (peer is None)
 
 
 class AudioToolsBackend(Backend):
@@ -819,10 +820,8 @@ class AudioToolsBackend(Backend):
         self._log.debug(u'ReplayGain for album {0}: {1:.2f}, {2:.2f}',
                         album, rg_album_gain, rg_album_peak)
 
-            
 
 # Main plugin logic.
-
 class ReplayGainPlugin(BeetsPlugin):
     """Provides ReplayGain analysis.
     """
@@ -882,8 +881,8 @@ class ReplayGainPlugin(BeetsPlugin):
 
     def track_requires_gain(self, item):
         return self.overwrite or \
-            (self.should_use_r128(item) and not item.r128_track_gain) or \
-            (not self.should_use_r128(item) and
+               (self.should_use_r128(item) and not item.r128_track_gain) or \
+               (not self.should_use_r128(item) and
                 (not item.rg_track_gain or not item.rg_track_peak))
 
     def album_requires_gain(self, album):
@@ -892,12 +891,12 @@ class ReplayGainPlugin(BeetsPlugin):
         # needs recalculation, we still get an accurate album gain
         # value.
         return self.overwrite or \
-            any([self.should_use_r128(item) and
-                (not item.r128_track_gain or not item.r128_album_gain)
-                for item in album.items()]) or \
-            any([not self.should_use_r128(item) and
-                (not item.rg_album_gain or not item.rg_album_peak)
-                for item in album.items()])
+               any([self.should_use_r128(item) and
+                    (not item.r128_track_gain or not item.r128_album_gain)
+                    for item in album.items()]) or \
+               any([not self.should_use_r128(item) and
+                    (not item.rg_album_gain or not item.rg_album_peak)
+                    for item in album.items()])
 
     def store_track_gain(self, item, track_gain):
         item.rg_track_gain = track_gain.gain
@@ -944,10 +943,10 @@ class ReplayGainPlugin(BeetsPlugin):
 
         if (any([self.should_use_r128(item) for item in album.items()]) and not
                 all(([self.should_use_r128(item) for item in album.items()]))):
-                raise ReplayGainError(
-                    u"Mix of ReplayGain and EBU R128 detected"
-                    u" for some tracks in album {0}".format(album)
-                )
+            raise ReplayGainError(
+                u"Mix of ReplayGain and EBU R128 detected"
+                u" for some tracks in album {0}".format(album)
+            )
 
         if any([self.should_use_r128(item) for item in album.items()]):
             if self.r128_backend_instance == '':
@@ -1058,7 +1057,7 @@ class ReplayGainPlugin(BeetsPlugin):
         cmd.parser.add_option(
             "-f", "--force", dest="force", action="store_true", default=False,
             help=u"analyze all files, including those that "
-            "already have ReplayGain metadata")
+                 "already have ReplayGain metadata")
         cmd.parser.add_option(
             "-w", "--write", default=None, action="store_true",
             help=u"write new metadata to files' tags")

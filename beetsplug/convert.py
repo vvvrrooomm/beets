@@ -71,7 +71,7 @@ def get_format(fmt=None):
     except KeyError:
         raise ui.UserError(
             u'convert: format {0} needs the "command" field'
-            .format(fmt)
+                .format(fmt)
         )
     except ConfigTypeError:
         command = config['convert']['formats'][fmt].get(str)
@@ -106,8 +106,7 @@ def should_transcode(item, fmt):
             not (item.format.lower() in LOSSLESS_FORMATS):
         return False
     maxbr = config['convert']['max_bitrate'].get(int)
-    return fmt.lower() != item.format.lower() or \
-        item.bitrate >= 1000 * maxbr
+    return fmt.lower() != item.format.lower() or item.bitrate >= 1000 * maxbr
 
 
 class ConvertPlugin(BeetsPlugin):
