@@ -175,7 +175,8 @@ class ConvertPlugin(BeetsPlugin):
     def auto_convert(self, config, task):
         if self.config['auto']:
             pool = ThreadPool()
-            pool.starmap(self.convert_on_import, zip(repeat(config.lib),list(task.imported_items())))
+            pool.starmap(self.convert_on_import,
+                         zip(repeat(config.lib), list(task.imported_items())))
             pool.close()
             pool.join()
 

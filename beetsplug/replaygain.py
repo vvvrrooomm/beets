@@ -181,7 +181,7 @@ class Bs1770gainBackend(Backend):
         chunk_size = min(job_size, self.chunk_at)
         for chunk in self.isplitter(items, chunk_size):
             i += 1
-            returnchunk = self.compute_chunk_gain(chunk, is_album)
+            returnchunk = self.compute_chunk_gain(chunk)
             albumgaintot += returnchunk.album_gain.gain
             albumpeaktot = max(albumpeaktot, returnchunk.album_gain.peak)
             returnchunks.track_gains.update(returnchunk.track_gains)
@@ -200,7 +200,7 @@ class Bs1770gainBackend(Backend):
         output = call(args)
         return output
 
-    def compute_chunk_gain(self, items, is_album):
+    def compute_chunk_gain(self, items):
         """Compute ReplayGain values and return a list of results
         dictionaries as given by `parse_tool_output`.
         """
