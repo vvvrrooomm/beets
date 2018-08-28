@@ -83,12 +83,13 @@ class Backend(object):
         """
         self._log = log
 
-    def compute_track_gain(self, items):
+    def compute_tracks_gain(self, items):
+        # TODO: implement track gain in terms of album gain of the
+        # individual tracks which can be used for any backend.
+
         raise NotImplementedError()
 
     def compute_album_gain(self, album):
-        # TODO: implement album gain in terms of track gain of the
-        # individual tracks which can be used for any backend.
         raise NotImplementedError()
 
 
@@ -120,7 +121,7 @@ class Bs1770gainBackend(Backend):
                 u'no replaygain command found: install bs1770gain'
             )
 
-    def compute_track_gain(self, items):
+    def compute_tracks_gain(self, items):
         """Computes the track gain of the given tracks, returns a list
         of TrackGain objects.
         """
@@ -334,7 +335,7 @@ class CommandBackend(Backend):
         target_level = config['targetlevel'].as_number()
         self.gain_offset = int(target_level - 89)
 
-    def compute_track_gain(self, items):
+    def compute_tracks_gain(self, items):
         """Computes the track gain of the given tracks, returns a list
         of TrackGain objects.
         """
@@ -535,7 +536,7 @@ class GStreamerBackend(Backend):
             if self._error is not None:
                 raise self._error
 
-    def compute_track_gain(self, items):
+    def compute_tracks_gain(self, items):
         self.compute(items, False)
         if len(self._file_tags) != len(items):
             raise ReplayGainError(u"Some tracks did not receive tags")
@@ -763,7 +764,7 @@ class AudioToolsBackend(Backend):
             return
         return rg
 
-    def compute_track_gain(self, items):
+    def compute_tracks_gain(self, items):
         """Compute ReplayGain values for the requested items.
 
         :return list: list of :class:`Gain` objects
@@ -1014,7 +1015,7 @@ class ReplayGainPlugin(BeetsPlugin):
             store_track_gain = self.store_track_gain
 
         try:
-            track_gains = backend_instance.compute_track_gain([item])
+            track_gains = backend_instance.compute_tracks_gain([item])
             if len(track_gains) != 1:
                 raise ReplayGainError(
                     u"ReplayGain backend failed for track {0}".format(item)
