@@ -86,6 +86,7 @@ setup(
     },
 
     install_requires=[
+        'psutil',
         'six>=1.9',
         'mutagen>=1.33',
         'munkres',
@@ -111,6 +112,7 @@ setup(
 
     # Plugin (optional) dependencies:
     extras_require={
+        'replaygain': ['psutil'],
         'absubmit': ['requests'],
         'fetchart': ['requests'],
         'chroma': ['pyacoustid'],

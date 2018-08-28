@@ -24,6 +24,8 @@ import xml.parsers.expat
 from math import ceil
 from multiprocessing.pool import ThreadPool
 from itertools import repeat
+
+import psutil
 from six.moves import zip
 
 from beets import ui
@@ -177,9 +179,9 @@ class Bs1770gainBackend(Backend):
         # In the case of very large sets of music, we break the tracks
         # into smaller chunks and process them one at a time. This
         # avoids running out of memory.
-        job_size = ceil(len(items) / os.cpu_count())
+        job_size = int(ceil(len(items) / psutil.cpu_count()))
         chunk_size = min(job_size, self.chunk_at)
-        chunk_count = ceil(len(items) / chunk_size)
+        chunk_count = int(ceil(len(items) / chunk_size))
 
         result = self.threaded_compute_gain(items, chunk_size, chunk_count)
 
@@ -956,7 +958,7 @@ class ReplayGainPlugin(BeetsPlugin):
         self._log.info(u'analyzing {0}', album)
 
         if (any([self.should_use_r128(item) for item in album.items()]) and not
-                all(([self.should_use_r128(item) for item in album.items()]))):
+        all(([self.should_use_r128(item) for item in album.items()]))):
             raise ReplayGainError(
                 u"Mix of ReplayGain and EBU R128 detected"
                 u" for some tracks in album {0}".format(album)
@@ -992,20 +994,20 @@ class ReplayGainPlugin(BeetsPlugin):
             raise ui.UserError(
                 u"Fatal replay gain error: {0}".format(e))
 
-    def handle_track(self, item, write, force=False):
+    def handle_tracks(self, items, write, force=False):
         """Compute track replay gain and store it in the item.
 
         If ``write`` is truthy then ``item.write()`` is called to write
         the data to disk.  If replay gain information is already present
         in the item, nothing is done.
         """
-        if not force and not self.track_requires_gain(item):
-            self._log.info(u'Skipping track {0}', item)
+        if not force:
+            items = filter(self.track_requires_gain, items)
             return
 
-        self._log.info(u'analyzing {0}', item)
+        self._log.info(u'analyzing {0}', items)
 
-        if self.should_use_r128(item):
+        if self.should_use_r128(items):
             if self.r128_backend_instance == '':
                 self.init_r128_backend()
             backend_instance = self.r128_backend_instance
@@ -1015,15 +1017,15 @@ class ReplayGainPlugin(BeetsPlugin):
             store_track_gain = self.store_track_gain
 
         try:
-            track_gains = backend_instance.compute_tracks_gain([item])
+            track_gains = backend_instance.compute_tracks_gain([items])
             if len(track_gains) != 1:
                 raise ReplayGainError(
-                    u"ReplayGain backend failed for track {0}".format(item)
+                    u"ReplayGain backend failed for track {0}".format(items)
                 )
 
-            store_track_gain(item, track_gains[0])
+            store_track_gain(items, track_gains[0])
             if write:
-                item.try_write()
+                items.try_write()
         except ReplayGainError as e:
             self._log.info(u"ReplayGain error: {0}", e)
         except FatalReplayGainError as e:
@@ -1049,11 +1051,12 @@ class ReplayGainPlugin(BeetsPlugin):
         if task.is_album:
             self.handle_album(task.album, False)
         else:
-            self.handle_track(task.item, False)
+            self.handle_tracks(task.item, False)
 
     def commands(self):
         """Return the "replaygain" ui subcommand.
         """
+
         def func(lib, opts, args):
             write = ui.should_write(opts.write)
             force = opts.force
@@ -1063,12 +1066,7 @@ class ReplayGainPlugin(BeetsPlugin):
                     self.handle_album(album, write, force)
 
             else:
-                pool = ThreadPool()
-                pool.starmap(self.handle_track,
-                             zip(lib.items(ui.decargs(args)),
-                                 repeat([write, force])))
-                pool.close()
-                pool.join()
+                self.handle_tracks(lib.items(ui.decargs(args)), write, force)
 
         cmd = ui.Subcommand('replaygain', help=u'analyze for ReplayGain')
         cmd.parser.add_album_option()

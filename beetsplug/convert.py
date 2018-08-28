@@ -18,23 +18,23 @@
 from __future__ import division, absolute_import, print_function
 
 import os
-import threading
+import platform
+import shlex
 import subprocess
 import tempfile
-import shlex
-import six
-from string import Template
-import platform
+import threading
 from multiprocessing.pool import ThreadPool
-from itertools import repeat
+from string import Template
 
-from beets import ui, util, plugins, config
-from beets.plugins import BeetsPlugin
-from beets.util.confit import ConfigTypeError
+import six
+
 from beets import art
-from beets.util.artresizer import ArtResizer
-from beets.library import parse_query_string
+from beets import ui, util, plugins, config
 from beets.library import Item
+from beets.library import parse_query_string
+from beets.plugins import BeetsPlugin
+from beets.util.artresizer import ArtResizer
+from beets.util.confit import ConfigTypeError
 
 _fs_lock = threading.Lock()
 _temp_files = []  # Keep track of temporary transcoded files for deletion.
@@ -174,8 +174,11 @@ class ConvertPlugin(BeetsPlugin):
     def auto_convert(self, config, task):
         if self.config['auto']:
             pool = ThreadPool()
-            pool.starmap(self.convert_on_import,
-                         zip(repeat(config.lib), list(task.imported_items())))
+            #            pool.starmap(self.convert_on_import,
+            #             zip(repeat(config.lib), list(task.imported_items())))
+            convert_with_lib = lambda items: self.convert_on_import(config.lib,
+                                                                    items)
+            pool.map(convert_with_lib, list(task.imported_items()))
             pool.close()
             pool.join()
 
