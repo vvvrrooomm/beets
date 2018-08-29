@@ -234,7 +234,7 @@ class Bs1770gainBackend(Backend):
         containing information about each analyzed file.
         """
         per_file_gain = {}
-        album_gain = []  # mutable variable so it can be set from handlers
+        album_gain = {}  # mutable variable so it can be set from handlers
         parser = xml.parsers.expat.ParserCreate(encoding='utf-8')
         state = {'file': None, 'gain': None, 'peak': None}
 
@@ -261,15 +261,16 @@ class Bs1770gainBackend(Backend):
                 if state['gain'] is None or state['peak'] is None:
                     raise ReplayGainError(u'could not parse gain or peak from '
                                           'the output of bs1770gain')
-                if sys.version_info >= (3, 0): nonlocal album_gain
-                album_gain = Gain(state['gain'], state['peak'])
+                album_gain['outer'] = Gain(state['gain'],
+                                           state['peak'])
                 state['gain'] = state['peak'] = None
 
         parser.StartElementHandler = start_element_handler
         parser.EndElementHandler = end_element_handler
         parser.Parse(text, True)
 
-        return AlbumGain(track_gains=per_file_gain, album_gain=album_gain)
+        return AlbumGain(track_gains=per_file_gain,
+                         album_gain=album_gain['outer'])
 
     def sort_by_file(self, per_file_gain, path_list):
         # bs1770gain does not return the analysis results in the order that
