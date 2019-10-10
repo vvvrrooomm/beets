@@ -112,9 +112,9 @@ class Bs1770gainBackend(Backend):
 
         cmd = 'bs1770gain'
         try:
-            call([cmd, self.method])
+            call([cmd, self.method, '-v'])
             self.command = cmd
-        except OSError:
+        except (OSError, ReplayGainError) as e:
             raise FatalReplayGainError(
                 u'Is bs1770gain installed? Is your method in config correct?'
             )
