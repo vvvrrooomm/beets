@@ -223,7 +223,7 @@ class Bs1770gainBackend(Backend):
         # Construct shell command.
         cmd = [self.command]
         cmd += [self.method]
-        cmd += ['--xml', '-p']
+        cmd += ['--xml', '-p', '--suppress-progess']
 
         # Workaround for Windows: the underlying tool fails on paths
         # with the \\?\ prefix, so we don't use it here. This
